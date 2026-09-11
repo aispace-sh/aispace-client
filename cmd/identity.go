@@ -144,8 +144,6 @@ func (a *app) identityCreateCmd() *cobra.Command {
 	}}
 	cmd.Flags().StringVar(&name, "name", "", "display name")
 	cmd.Flags().StringVar(&handle, "handle", "", "account-local lowercase slug")
-	_ = cmd.MarkFlagRequired("name")
-	_ = cmd.MarkFlagRequired("handle")
 	return cmd
 }
 
@@ -340,7 +338,6 @@ func (a *app) identityRotateCmd() *cobra.Command {
 		return a.publishPendingRotation(cmd.Context(), client, store, pending)
 	}}
 	cmd.Flags().StringVar(&purpose, "purpose", "", "key purpose: encryption or signing")
-	_ = cmd.MarkFlagRequired("purpose")
 	return cmd
 }
 

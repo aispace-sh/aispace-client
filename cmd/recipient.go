@@ -172,7 +172,6 @@ func (a *app) recipientVerifyCmd() *cobra.Command {
 		return nil
 	}}
 	cmd.Flags().StringVar(&fingerprint, "fingerprint", "", "expected full 32-byte fingerprint")
-	_ = cmd.MarkFlagRequired("fingerprint")
 	return cmd
 }
 
