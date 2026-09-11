@@ -94,6 +94,24 @@ the API's code and message together with the exit code, so a caller can branch o
 
 `details` and `retry_after` are included when the server supplies them.
 
+One sanitized example per exit-code class. These are produced by the tests in
+`cmd/error_contract_test.go`, so they cannot drift from what the binary emits:
+
+```json
+{"error":{"code":"usage","exit_code":2,"message":"--expires: invalid duration \"nope\" (try 30m, 24h, 7d)"}}
+{"error":{"code":"invalid_key","exit_code":3,"message":"Invalid key","status":401}}
+{"error":{"code":"quota_exceeded","exit_code":4,"message":"Account allowance exceeded","status":402}}
+{"error":{"code":"rate_limited","exit_code":5,"message":"Too many requests","status":429}}
+{"error":{"code":"monthly_upload_cap","exit_code":5,"message":"Monthly upload cap reached","status":429}}
+```
+
+`status` is absent when no HTTP response was involved, as in the usage example above. `exit_code`
+always matches the process exit status, so a caller can branch on whichever it already has.
+
+`--json` is honoured wherever it appears, including after a flag that fails to parse: an
+unrecognised flag stops parsing, and reporting that failure in human form would defeat the one flag
+whose purpose is that errors stay machine-readable. `--json=false` still disables it.
+
 ## Exit codes
 
 | Code | Meaning | Typical cause |

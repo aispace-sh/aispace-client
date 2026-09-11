@@ -84,6 +84,12 @@ func (e *codedError) Unwrap() error { return e.err }
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, version string) int {
 	a := &app{version: version, stdin: stdin, stdout: stdout, stderr: stderr}
 	root := a.newRootCmd()
+	// Seed --json from the raw arguments. Flag parsing stops at the first thing
+	// it does not recognise, so a typo before --json would otherwise leave the
+	// error in human form -- defeating the one flag whose purpose is that
+	// failures stay machine-readable. A successful parse overwrites this with
+	// the real value, so an explicit --json=false still wins.
+	a.jsonOut = jsonRequested(args)
 	root.SetArgs(args)
 	root.SetOut(stdout)
 	root.SetErr(stderr)
@@ -182,6 +188,27 @@ func (a *app) newRootCmd() *cobra.Command {
 	// unaffected, so dynamic completion keeps working.
 	root.CompletionOptions.DisableDefaultCmd = true
 	return root
+}
+
+// jsonRequested reports whether --json appears in args, without relying on flag
+// parsing having succeeded. Arguments after a bare "--" are positional, so they
+// are not considered.
+func jsonRequested(args []string) bool {
+	requested := false
+	for _, arg := range args {
+		switch {
+		case arg == "--":
+			return requested
+		case arg == "--json":
+			requested = true
+		case strings.HasPrefix(arg, "--json="):
+			// pflag accepts --json=false; honour it rather than assuming true.
+			requested = strings.EqualFold(arg[len("--json="):], "true") ||
+				arg[len("--json="):] == "1" ||
+				strings.EqualFold(arg[len("--json="):], "t")
+		}
+	}
+	return requested
 }
 
 // minArgs is cobra.MinimumNArgs but yields a usage error (exit 2).
