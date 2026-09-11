@@ -681,6 +681,54 @@ aispace quota --json | jq '.month | {uploads_left: (.uploads_limit - .uploads_us
 aispace quota --json | jq '[.limits.max_file_bytes, .account.remaining_bytes] | min'
 ```
 
+### `aispace doctor`
+
+```
+aispace doctor [--json]
+```
+
+Runs the checks that explain why a command is failing, in the order a command hits them: where the
+key comes from, whether the server URL is usable, whether the key is accepted, and whether any
+allowance is spent. Nothing is uploaded, nothing is modified, and the key is never printed.
+
+```
+$ aispace doctor
+aispace 0.4.0 (darwin/arm64)
+
+ok    config       key from AISPACE_KEY
+      config       -> the config file is also set and is being ignored
+ok    config-file  /home/you/.config/aispace/config.json
+ok    url          https://aispace.sh
+ok    auth         research-bot (ask_9fK2mQ1x) for you@example.com
+warn  quota-key    3.0 MB of 50.0 MB remaining
+      quota-key    -> delete files with `aispace rm`, or raise the key budget in the dashboard
+fail  quota-uploads  monthly upload cap reached (100/100), resets 2026-10-01T00:00:00Z
+
+1 check failing, 1 warning
+```
+
+Every check that can still run does run, so one problem does not hide another; checks that cannot
+run report `skip` rather than being omitted.
+
+**The exit code is the one the failing command would itself have returned**, so a caller branches on
+the codes it already knows rather than a second set:
+
+| First failing check | Exit |
+|---|---|
+| no key, rejected key, revoked key | `3` |
+| unusable `--url`, or a key containing a control character | `2` |
+| storage allowance exhausted | `4` |
+| monthly upload or download cap reached | `5` |
+| server unreachable, or any other failure | `1` |
+
+Warnings never change the exit code, so `doctor` exiting `0` means "nothing is blocking a command
+right now", not "nothing worth reading".
+
+```sh
+aispace doctor --json | jq -r '.checks[] | select(.status=="fail") | "\(.name): \(.detail)"'
+aispace doctor >/dev/null || echo "not ready, exit $?"
+```
+
 ### `aispace whoami`
 
 Prints key name, prefix, account email and the key's usage against its budget

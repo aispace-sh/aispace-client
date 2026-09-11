@@ -176,6 +176,7 @@ func (a *app) newRootCmd() *cobra.Command {
 		a.whoamiCmd(),
 		a.versionCmd(),
 		a.completionCmd(),
+		a.doctorCmd(),
 	)
 	// Replace cobra's generated completion command with one that can also
 	// install the script. The hidden __complete command it relies on is
