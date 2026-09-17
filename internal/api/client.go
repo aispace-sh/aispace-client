@@ -158,6 +158,18 @@ func (c *Client) Download(ctx context.Context, id string) (*http.Response, error
 // DownloadWithIdempotency opens an authenticated stream and identifies retries
 // of the same logical download to the service.
 func (c *Client) DownloadWithIdempotency(ctx context.Context, id, idempotencyKey string) (*http.Response, error) {
+	return c.DownloadRange(ctx, id, idempotencyKey, "")
+}
+
+// DownloadRange is DownloadWithIdempotency starting at a byte offset. A
+// non-empty byteRange must be an HTTP Range value such as "bytes=42-".
+//
+// A server that honours the range answers 206 and the caller appends. A server
+// that ignores it answers 200 with the whole file, which is not an error but
+// means the caller must start the file again rather than append. Both are
+// returned so the caller can tell them apart from resp.StatusCode; 416 arrives
+// as an *Error carrying that status, which means the offset is past the end.
+func (c *Client) DownloadRange(ctx context.Context, id, idempotencyKey, byteRange string) (*http.Response, error) {
 	transferCtx, watch := startTransferWatch(ctx, c.InactivityTimeout)
 	req, err := c.newRequest(transferCtx, http.MethodGet, "/v1/files/"+url.PathEscape(id)+"/content", nil)
 	if err != nil {
@@ -165,6 +177,9 @@ func (c *Client) DownloadWithIdempotency(ctx context.Context, id, idempotencyKey
 		return nil, err
 	}
 	setIdempotencyKey(req, idempotencyKey)
+	if byteRange != "" {
+		req.Header.Set("Range", byteRange)
+	}
 	httpc := c.HTTP
 	if httpc == nil {
 		httpc = http.DefaultClient
@@ -178,7 +193,8 @@ func (c *Client) DownloadWithIdempotency(ctx context.Context, id, idempotencyKey
 			}
 			return nil, networkError(err)
 		}
-		if resp.StatusCode == http.StatusOK {
+		if resp.StatusCode == http.StatusOK ||
+			(byteRange != "" && resp.StatusCode == http.StatusPartialContent) {
 			if watch != nil {
 				watch.touch()
 				resp.Body = &watchedBody{ReadCloser: resp.Body, ctx: transferCtx, watch: watch}

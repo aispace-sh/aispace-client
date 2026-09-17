@@ -430,7 +430,7 @@ directory before removing a leftover key; it may be the only way to decrypt a st
 ### `aispace download`
 
 ```
-aispace download <file_id> --output <path|-> [--verify] [--json]
+aispace download <file_id> --output <path|-> [--verify] [--resume] [--json]
 ```
 
 Downloads a file owned by the current key or shared with the account by another key. This uses
@@ -460,6 +460,46 @@ aispace download "$id" --output report.pdf --verify || echo "corrupt, nothing wr
 # --json adds the digest that was verified
 aispace download "$id" --output report.pdf --verify --json | jq -r .sha256
 ```
+
+#### Resuming an interrupted download
+
+Without `--resume`, a transfer that fails part-way is discarded: the partial output is removed and
+the next attempt starts from zero. On a large file over an unreliable link that can mean never
+finishing at all.
+
+`--resume` writes to `<output>.partial` and renames it into place only once the whole file has
+arrived and matched its digest. A failed run **keeps** the partial, so rerunning the same command
+continues from where it stopped:
+
+```sh
+aispace download "$id" --output big.zip --resume
+# ... connection drops at 1.2 GB ...
+aispace download "$id" --output big.zip --resume
+# resuming big.zip at 1.2 GB of 4.0 GB
+# downloaded 01J8ZQ... -> big.zip sha256 verified
+```
+
+Alongside the partial is `<output>.partial.json`, recording the file ID, size and digest the
+partial belongs to. A partial is only continued when all three still match, so a file that was
+deleted and re-uploaded under the same ID, or a stray `.partial` from something else, causes a
+clean restart with the reason on stderr rather than a silently corrupt result.
+
+**Integrity is checked over the assembled file, not the bytes one run received.** That is the
+difference that makes resuming safe: bytes carried over from an earlier run are exactly what a
+per-run hash cannot vouch for. If the assembled file does not match, it is discarded rather than
+kept for another resume, because a partial known to be wrong has no value.
+
+Two server behaviours are handled rather than assumed:
+
+| Response to `Range` | Behaviour |
+|---|---|
+| `206 Partial Content` | the remainder is appended |
+| `200 OK` (range ignored by a server or proxy) | the partial is truncated and rewritten from the start, rather than appending a second copy |
+| `416 Range Not Satisfiable` | the saved offset is past the end, so the partial is discarded and the download restarts |
+
+`--resume` needs a real file, so it cannot be combined with `--output -`. Files uploaded without
+`--sha256` have no recorded digest; they still resume, with a warning that the result could not be
+verified.
 
 ### `aispace keygen`
 

@@ -21,16 +21,22 @@ import (
 func (a *app) downloadCmd() *cobra.Command {
 	var output string
 	var verify bool
+	var resume bool
 	cmd := &cobra.Command{
-		Use:   "download <file_id> --output <path|-> [--verify]",
+		Use:   "download <file_id> --output <path|-> [--verify] [--resume]",
 		Short: "Download an accessible file by ID without creating a public link",
 		Long: "Downloads a file this key owns or that is shared with the account, using key\n" +
 			"authentication rather than a public link.\n\n" +
 			"With --verify the bytes are hashed as they are written and compared with the\n" +
 			"SHA-256 the API records for every file. That costs one extra metadata request.\n" +
-			"A response without a digest is rejected as incomplete server metadata.",
-		Example: "  aispace download 01J8ZQ3V9N7X2K4M6P8R0T2W4Y --output report.pdf --verify",
-		Args:    exactArgs(1, "<file_id>"),
+			"A response without a digest is rejected as incomplete server metadata.\n\n" +
+			"With --resume the bytes land in <output>.partial and are renamed into place only\n" +
+			"once the whole file has arrived and matched its recorded digest. A failed run\n" +
+			"keeps the partial file, so rerunning the same command continues from where it\n" +
+			"stopped instead of starting the transfer again.",
+		Example: "  aispace download 01J8ZQ3V9N7X2K4M6P8R0T2W4Y --output report.pdf --verify\n" +
+			"  aispace download 01J8ZQ3V9N7X2K4M6P8R0T2W4Y --output big.zip --resume",
+		Args: exactArgs(1, "<file_id>"),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if output == "" {
 				return usagef("--output is required")
@@ -38,11 +44,18 @@ func (a *app) downloadCmd() *cobra.Command {
 			if output == "-" && a.jsonOut {
 				return usagef("--json cannot be used with --output -")
 			}
+			if resume && output == "-" {
+				return usagef("--resume needs a file to continue; it cannot be used with --output -")
+			}
 			c, err := a.client()
 			if err != nil {
 				return err
 			}
 			id := args[0]
+
+			if resume {
+				return a.runResumableDownload(cmd.Context(), c, id, output, verify)
+			}
 
 			// Read the recorded digest before transferring anything: without one
 			// there is nothing to compare against, and saying so now avoids
@@ -131,6 +144,7 @@ func (a *app) downloadCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVarP(&output, "output", "o", "", "destination path, or - for stdout (required)")
 	cmd.Flags().BoolVar(&verify, "verify", false, "check the downloaded bytes against the file's recorded SHA-256 (one extra API call)")
+	cmd.Flags().BoolVar(&resume, "resume", false, "continue an interrupted download from <output>.partial")
 	return cmd
 }
 
