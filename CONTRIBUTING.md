@@ -33,6 +33,18 @@ go build -ldflags "-X main.version=0.0.0-dev" -o aispace .
 ./aispace version
 ```
 
+The parsers that accept input from outside — sealed fragments and references,
+delivery manifests, identity invitations, fingerprints, public keys, and handoff
+intents — have fuzz targets. Their seed corpora run as ordinary tests, so
+`go test ./...` already covers them. To search for new inputs:
+
+```sh
+go test ./internal/handoff/ -run xxx -fuzz FuzzParseOriginIsEnforced -fuzztime 2m
+```
+
+A failure writes the offending input to `testdata/fuzz/`; commit it with the fix
+so it becomes a permanent regression case.
+
 Tests that exercise the hosted service must use a dedicated low-budget key. Never commit a key or
 place it in a fixture, command transcript, issue, or pull-request description.
 
